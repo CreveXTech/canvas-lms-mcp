@@ -5,7 +5,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod/v3";
 
-const CANVAS_BASE_URL = process.env.CANVAS_BASE_URL ?? "https://canvas.instructure.com/api/v1";
+const CANVAS_BASE_URL =
+  process.env.CANVAS_BASE_URL ?? "https://canvas.instructure.com/api/v1";
 const CANVAS_API_TOKEN = process.env.CANVAS_API_TOKEN;
 
 if (!CANVAS_API_TOKEN) {
@@ -36,7 +37,15 @@ async function canvasFetch(path: string): Promise<unknown> {
   }
 
   if (!response.ok) {
-    throw new Error(`Canvas API request failed: ${response.status} ${response.statusText}`);
+    let body = "";
+    try {
+      body = await response.text();
+    } catch {
+      // ignore
+    }
+    throw new Error(
+      `Canvas API request failed: ${response.status} ${response.statusText} for ${url}${body ? ` — ${body}` : ""}`,
+    );
   }
 
   try {
@@ -47,7 +56,21 @@ async function canvasFetch(path: string): Promise<unknown> {
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractMediaUrls(html: string): string[] {
+  const urls: string[] = [];
+  // iframes (Kaltura, Panopto, YouTube, etc.)
+  const iframeSrc = html.matchAll(/\biframe\b[^>]*\bsrc=["']([^"']+)["']/gi);
+  for (const m of iframeSrc) urls.push(m[1]);
+  // <a> href links to media
+  const anchors = html.matchAll(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/gi);
+  for (const m of anchors) urls.push(m[1]);
+  return [...new Set(urls)];
 }
 
 function mcpText(data: unknown) {
@@ -167,7 +190,7 @@ server.registerTool(
   },
   async ({ course_id }) => {
     const enrollments = (await canvasFetch(
-      `/courses/${course_id}/enrollments?user_id=self`
+      `/courses/${course_id}/enrollments?user_id=self`,
     )) as Array<{
       id: number;
       type: string;
@@ -242,7 +265,7 @@ server.registerTool(
   },
   async ({ course_id, assignment_id }) => {
     const assignment = (await canvasFetch(
-      `/courses/${course_id}/assignments/${assignment_id}`
+      `/courses/${course_id}/assignments/${assignment_id}`,
     )) as {
       id: number;
       name: string;
@@ -276,7 +299,9 @@ server.registerTool(
     const result = {
       id: assignment.id,
       name: assignment.name,
-      description: assignment.description ? stripHtml(assignment.description) : assignment.description,
+      description: assignment.description
+        ? stripHtml(assignment.description)
+        : assignment.description,
       due_at: assignment.due_at,
       points_possible: assignment.points_possible,
       submission_types: assignment.submission_types,
@@ -287,7 +312,9 @@ server.registerTool(
         ? assignment.rubric.map((criterion) => ({
             ...criterion,
             description: stripHtml(criterion.description),
-            long_description: criterion.long_description ? stripHtml(criterion.long_description) : criterion.long_description,
+            long_description: criterion.long_description
+              ? stripHtml(criterion.long_description)
+              : criterion.long_description,
           }))
         : null,
       rubric_settings: assignment.rubric_settings ?? null,
@@ -295,6 +322,135 @@ server.registerTool(
 
     return mcpText(result);
   }
+);
+
+server.registerTool(
+  "list_modules",
+  {
+    description: "List all modules for a course with id, name, and position",
+    inputSchema: {
+      course_id: courseIdSchema,
+    },
+  },
+  async ({ course_id }) => {
+    const modules = (await canvasFetch(
+      `/courses/${course_id}/modules?per_page=${PER_PAGE_DEFAULT}`,
+    )) as Array<{
+      id: number;
+      name: string;
+      position: number;
+      items_count: number;
+      state: string | null;
+      completed_at: string | null;
+      prerequisite_module_ids: number[];
+    }>;
+
+    const result = modules.map((m) => ({
+      id: m.id,
+      name: m.name,
+      position: m.position,
+      items_count: m.items_count,
+      state: m.state,
+      completed_at: m.completed_at,
+      prerequisite_module_ids: m.prerequisite_module_ids,
+    }));
+
+    return mcpText(result);
+  },
+);
+
+server.registerTool(
+  "get_module",
+  {
+    description:
+      "Get all items in a module and fetch full content for page-type items (body text, assignments, etc.)",
+    inputSchema: {
+      course_id: courseIdSchema,
+      module_id: z.string().regex(/^\d+$/, "module_id must be numeric").describe("The Canvas module ID"),
+    },
+  },
+  async ({ course_id, module_id }) => {
+    const items = (await canvasFetch(
+      `/courses/${course_id}/modules/${module_id}/items?per_page=100`,
+    )) as Array<{
+      id: number;
+      title: string;
+      type: string;
+      position: number;
+      indent: number;
+      html_url: string | null;
+      url: string | null;
+      page_url: string | null;
+      content_id: number | null;
+      completion_requirement: { type: string; completed: boolean } | null;
+    }>;
+
+    const enriched = await Promise.all(
+      items.map(async (item) => {
+        const base = {
+          id: item.id,
+          title: item.title,
+          type: item.type,
+          position: item.position,
+          indent: item.indent,
+          html_url: item.html_url,
+          content_id: item.content_id,
+          completion_requirement: item.completion_requirement,
+          content: null as string | null,
+          media_urls: [] as string[],
+        };
+
+        try {
+          if (item.type === "Page" && item.page_url) {
+            const page = (await canvasFetch(
+              `/courses/${course_id}/pages/${item.page_url}`,
+            )) as { body: string | null; title: string };
+            base.content = page.body ? stripHtml(page.body) : null;
+            base.media_urls = page.body ? extractMediaUrls(page.body) : [];
+          } else if (item.type === "Assignment" && item.content_id) {
+            const assignment = (await canvasFetch(
+              `/courses/${course_id}/assignments/${item.content_id}`,
+            )) as {
+              description: string | null;
+              due_at: string | null;
+              points_possible: number | null;
+            };
+            base.content = assignment.description
+              ? stripHtml(assignment.description)
+              : null;
+          } else if (item.type === "Discussion" && item.content_id) {
+            const topic = (await canvasFetch(
+              `/courses/${course_id}/discussion_topics/${item.content_id}`,
+            )) as { message: string | null };
+            base.content = topic.message ? stripHtml(topic.message) : null;
+          } else if (item.type === "Quiz" && item.content_id) {
+            const quiz = (await canvasFetch(
+              `/courses/${course_id}/quizzes/${item.content_id}`,
+            )) as { description: string | null };
+            base.content = quiz.description
+              ? stripHtml(quiz.description)
+              : null;
+          } else if (item.url) {
+            const data = (await canvasFetch(
+              item.url.replace(/^.*\/api\/v1/, ""),
+            )) as Record<string, unknown>;
+            if (typeof data["body"] === "string")
+              base.content = stripHtml(data["body"]);
+            else if (typeof data["message"] === "string")
+              base.content = stripHtml(data["message"]);
+            else if (typeof data["description"] === "string")
+              base.content = stripHtml(data["description"] as string);
+          }
+        } catch {
+          // If content fetch fails, leave content null
+        }
+
+        return base;
+      }),
+    );
+
+    return mcpText(enriched);
+  },
 );
 
 async function main() {
