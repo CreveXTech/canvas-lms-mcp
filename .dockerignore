@@ -1,0 +1,18 @@
+# Secrets must never reach a build layer — env comes in at runtime via env_file.
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+node_modules
+dist
+*.log
+
+Dockerfile
+.dockerignore
+compose.yaml
+README.md
+.DS_Store
+.vscode
+.idea
