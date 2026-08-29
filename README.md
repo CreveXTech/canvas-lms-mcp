@@ -98,9 +98,26 @@ Then restart the client. You can now ask things like:
 - *"Any new announcements in my classes?"*
 - *"What's the rubric for the final project in ENGL 200?"*
 
-### HTTP — the container
+### HTTP — remote or containerised clients
 
-[Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) in stateless mode: `POST /mcp`, one server instance per request, no sessions to keep alive.
+[Streamable HTTP](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports) in stateless mode: `POST /mcp`, a fresh server instance per request, no sessions to keep alive. `GET` and `DELETE` return 405 — stateless mode has no server-initiated stream to attach to.
+
+To run it directly, without Docker:
+
+```bash
+MCP_TRANSPORT=http MCP_AUTH_TOKEN=$(openssl rand -hex 32) pnpm start
+```
+
+The server refuses to start on HTTP without `MCP_AUTH_TOKEN` — the endpoint proxies your Canvas token and must not be left open. Every request needs `Authorization: Bearer <token>`, and its `Host` (and `Origin`, if sent) must be in `MCP_ALLOWED_HOSTS`.
+
+Register it with Claude Code:
+
+```bash
+claude mcp add --transport http canvas-lms http://localhost:3000/mcp \
+  --header "Authorization: Bearer $MCP_AUTH_TOKEN"
+```
+
+See [Docker](#docker) for the packaged version.
 
 ---
 
