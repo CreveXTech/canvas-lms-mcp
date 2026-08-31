@@ -1,0 +1,39 @@
+services:
+  canvas-mcp:
+    build: .
+    image: canvas-lms-mcp:2.0.0
+    container_name: canvas-lms-mcp
+    env_file: .env
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HTTP_PORT: "3000"
+      # Clients reach the server on the published port, so the Host header they
+      # send names 3111, not the container's 3000. Both must be allow-listed.
+      MCP_ALLOWED_HOSTS: localhost:3111,127.0.0.1:3111
+    ports:
+      # Loopback only — never publish this on 0.0.0.0.
+      - "127.0.0.1:3111:3000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
