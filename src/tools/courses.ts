@@ -96,7 +96,14 @@ export const courseTools: ToolGroup = (server, canvas) => {
         end_at: course.end_at,
         time_zone: course.time_zone,
         default_view: course.default_view,
-        term: course.term,
+        term: course.term
+          ? {
+              id: course.term.id,
+              name: course.term.name,
+              start_at: course.term.start_at,
+              end_at: course.term.end_at,
+            }
+          : null,
         syllabus: stripHtmlOrNull(course.syllabus_body),
       };
     },
@@ -117,12 +124,20 @@ export const courseTools: ToolGroup = (server, canvas) => {
         completed_at: timestamp,
       },
     },
-    async ({ course_id }) =>
-      canvas.get<{
+    async ({ course_id }) => {
+      const progress = await canvas.get<{
         requirement_count: number;
         requirement_completed_count: number;
         next_requirement_url: string | null;
         completed_at: string | null;
-      }>(`/courses/${course_id}/progress`),
+      }>(`/courses/${course_id}/progress`);
+
+      return {
+        requirement_count: progress.requirement_count,
+        requirement_completed_count: progress.requirement_completed_count,
+        next_requirement_url: progress.next_requirement_url,
+        completed_at: progress.completed_at,
+      };
+    },
   );
 };
