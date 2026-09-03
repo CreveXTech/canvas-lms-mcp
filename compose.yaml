@@ -8,11 +8,16 @@ services:
       MCP_TRANSPORT: http
       MCP_HTTP_PORT: "3000"
       # Clients reach the server on the published port, so the Host header they
-      # send names 3111, not the container's 3000. Both must be allow-listed.
-      MCP_ALLOWED_HOSTS: localhost:3111,127.0.0.1:3111
+      # send names 3111, not the container's 3000. Every name a client may dial
+      # must be allow-listed, or it gets a 403. Set MCP_ALLOWED_HOSTS in .env to
+      # add this host's Tailscale name and IP.
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost:3111,127.0.0.1:3111}
     ports:
-      # Loopback only — never publish this on 0.0.0.0.
-      - "127.0.0.1:3111:3000"
+      # Which interface to publish on, set per host as MCP_BIND_ADDR in .env —
+      # for remote access, that host's Tailscale IP (`tailscale ip -4`).
+      # Defaults to loopback. Keep it off 0.0.0.0: there is no TLS here, so the
+      # bearer token and every Canvas response would cross the LAN in the clear.
+      - "${MCP_BIND_ADDR:-127.0.0.1}:3111:3000"
     init: true
     restart: unless-stopped
     read_only: true

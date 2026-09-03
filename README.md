@@ -163,7 +163,11 @@ Then point an MCP client at it:
 
 What the compose file does for you:
 
-- Publishes on **127.0.0.1 only** — the port is never exposed off-machine.
+- Publishes on **127.0.0.1 by default**, or on whatever single interface `MCP_BIND_ADDR`
+  names. For access from another machine, set it to that host's Tailscale IP: there is no
+  TLS in the server, so Tailscale supplies the encrypted, device-authenticated path, and
+  `0.0.0.0` would put the bearer token and every Canvas response on the LAN in the clear.
+  Add the host's Tailscale name and IP to `MCP_ALLOWED_HOSTS` too, or `/mcp` answers 403.
 - Requires a **bearer token** on `/mcp`. This is not optional: the endpoint proxies your Canvas token, so the server refuses to start on HTTP without `MCP_AUTH_TOKEN`.
 - Validates the `Host` and `Origin` headers against an allow-list, which is what blocks DNS-rebinding attacks from a browser on your machine.
 - Runs as a non-root user, read-only root filesystem, all capabilities dropped, `no-new-privileges`.
