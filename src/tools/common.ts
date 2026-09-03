@@ -12,11 +12,15 @@ type Shape = Record<string, z.ZodTypeAny>;
 /**
  * Registers a read-only Canvas tool.
  *
- * Handlers return a plain object matching `outputSchema`; it is sent as
- * `structuredContent` (spec 2025-06-18) with a JSON text block alongside it for
- * clients that do not read structured output. Canvas failures come back as tool
- * execution errors rather than protocol errors, which is what spec 2025-11-25
- * calls for so the model can correct itself and retry.
+ * Handlers return a plain object matching `outputSchema`; it is parsed through
+ * that schema and the *parsed* value is sent as `structuredContent` (spec
+ * 2025-06-18), with a JSON text block alongside it for clients that do not read
+ * structured output. Parsing matters: Zod compiles every object to a JSON Schema
+ * with `additionalProperties: false`, so a handler that passes a raw Canvas
+ * object straight through would ship undeclared fields that clients reject.
+ * Parsing strips them at the boundary. Canvas failures — and schema mismatches —
+ * come back as tool execution errors rather than protocol errors, which is what
+ * spec 2025-11-25 calls for so the model can correct itself and retry.
  */
 export function registerReadOnlyTool<Output extends Shape, Input extends Shape = Shape>(
   server: McpServer,
@@ -29,12 +33,15 @@ export function registerReadOnlyTool<Output extends Shape, Input extends Shape =
   },
   handler: (args: z.output<z.ZodObject<Input>>) => Promise<z.input<z.ZodObject<Output>>>,
 ): void {
+  const output = z.object(spec.outputSchema);
+
   const run = async (args: unknown) => {
     try {
-      const data = await handler(args as z.output<z.ZodObject<Input>>);
+      const raw = await handler(args as z.output<z.ZodObject<Input>>);
+      const parsed = output.parse(raw);
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(data) }],
-        structuredContent: data as Record<string, unknown>,
+        content: [{ type: "text" as const, text: JSON.stringify(parsed) }],
+        structuredContent: parsed as Record<string, unknown>,
       };
     } catch (err) {
       return toolError(err);
@@ -77,6 +84,11 @@ function toolError(err: unknown) {
       message +=
         "\n\nNo such resource. Check the id — list the parent collection first to get valid ids.";
     }
+  } else if (err instanceof z.ZodError) {
+    message =
+      `This tool returned data that does not match its declared output schema:\n` +
+      z.prettifyError(err) +
+      `\n\nThis is a bug in the MCP server, not in your request.`;
   } else {
     message = err instanceof Error ? err.message : String(err);
   }
