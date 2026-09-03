@@ -12,23 +12,38 @@ I built this because I was tired of switching tabs to check what's due next or h
 
 34 tools across your whole Canvas account, all returning [structured output](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#structured-content) with declared schemas:
 
-| Area | Tools |
-|------|-------|
-| Courses | `list_courses`, `get_course`, `get_course_progress` |
-| Assignments | `list_assignments`, `get_assignment_details`, `list_assignment_groups` |
-| Modules | `list_modules`, `get_module` |
-| Pages | `list_pages`, `get_page` |
-| Discussions | `list_announcements`, `list_discussions`, `get_discussion` |
-| Quizzes | `list_quizzes`, `get_quiz` |
-| Grades & submissions | `get_grades`, `get_submission`, `list_submissions` |
-| Files | `list_files`, `list_folders`, `get_folder_files` |
-| People | `list_course_users`, `list_enrollments`, `list_sections` |
-| You | `get_user_profile`, `get_todo`, `get_activity_stream` |
-| Calendar | `list_calendar_events` |
-| Inbox | `list_conversations`, `get_conversation` |
-| Other | `list_rubrics`, `list_outcome_groups`, `list_outcomes`, `list_external_tools` |
+| Area | Group | Tools |
+|------|-------|-------|
+| Courses | `courses` | `list_courses`, `get_course`, `get_course_progress` |
+| Assignments | `assignments` | `list_assignments`, `get_assignment_details`, `list_assignment_groups` |
+| Modules | `modules` | `list_modules`, `get_module` |
+| Pages | `pages` | `list_pages`, `get_page` |
+| Discussions | `discussions` | `list_announcements`, `list_discussions`, `get_discussion` |
+| Quizzes | `quizzes` | `list_quizzes`, `get_quiz` |
+| Grades & submissions | `submissions` | `get_grades`, `get_submission`, `list_submissions` |
+| Files | `files` | `list_files`, `list_folders`, `get_folder_files` |
+| People | `people` | `list_course_users`, `list_enrollments`, `list_sections` |
+| You | `user` | `get_user_profile`, `get_todo`, `get_activity_stream` |
+| Calendar | `calendar` | `list_calendar_events` |
+| Inbox | `conversations` | `list_conversations`, `get_conversation` |
+| Other | `misc` | `list_rubrics`, `list_outcome_groups`, `list_outcomes`, `list_external_tools` |
 
 Canvas HTML is reduced to plain text (entities decoded) before it reaches the model, and `get_module` / `get_page` also pull out embedded media links.
+
+### Trimming the tool list
+
+Set `CANVAS_TOOLS` (allowlist) or `CANVAS_DISABLED_TOOLS` (denylist) to a
+comma-separated list of tool names, the group names above, or `*` globs. Filtered
+tools are never registered, so they stay out of `tools/list` and out of the
+client's context — unlike a client-side deny rule, which only blocks the call.
+
+```bash
+CANVAS_TOOLS=courses,assignments,modules,get_grades
+CANVAS_DISABLED_TOOLS=conversations,misc,list_external_tools
+```
+
+The denylist applies after the allowlist. A pattern that matches nothing is
+reported on stderr; a config leaving zero tools is a startup error.
 
 ---
 
@@ -171,6 +186,8 @@ What the compose file does for you:
 | `MCP_HTTP_PORT` | `3000` | Listen port. |
 | `MCP_HTTP_HOST` | `0.0.0.0` | Bind address. |
 | `MCP_ALLOWED_HOSTS` | `localhost:PORT,127.0.0.1:PORT` | Accepted `Host` header values. |
+| `CANVAS_TOOLS` | — | Allowlist of tool or group names to register. Unset means all. |
+| `CANVAS_DISABLED_TOOLS` | — | Tool or group names to skip, applied after `CANVAS_TOOLS`. |
 | `CANVAS_PER_PAGE` | `100` | Canvas page size. |
 | `CANVAS_TIMEOUT_MS` | `30000` | Per-request timeout. |
 | `CANVAS_MAX_PAGES` | `20` | Pagination safety stop (20 × 100 = 2000 records per call). |

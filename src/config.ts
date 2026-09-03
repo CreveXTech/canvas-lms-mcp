@@ -10,6 +10,10 @@ export interface Config {
   authToken: string | undefined;
   /** Host header values accepted by the HTTP transport (DNS rebinding protection). */
   allowedHosts: string[];
+  /** Tool and group name patterns to register. Empty means every tool. */
+  enabledTools: string[];
+  /** Tool and group name patterns to skip, applied after `enabledTools`. */
+  disabledTools: string[];
   perPage: number;
   requestTimeoutMs: number;
   maxPages: number;
@@ -30,6 +34,14 @@ function intEnv(name: string, fallback: number): number {
     throw new Error(`${name} must be a positive integer, got: ${raw}`);
   }
   return parsed;
+}
+
+/** Comma-separated env var to a lowercased list. */
+function listEnv(name: string): string[] {
+  return (process.env[name] ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 export function loadConfig(): Config {
@@ -64,6 +76,8 @@ export function loadConfig(): Config {
       .split(",")
       .map((h) => h.trim())
       .filter(Boolean),
+    enabledTools: listEnv("CANVAS_TOOLS"),
+    disabledTools: listEnv("CANVAS_DISABLED_TOOLS"),
     perPage: intEnv("CANVAS_PER_PAGE", 100),
     requestTimeoutMs: intEnv("CANVAS_TIMEOUT_MS", 30_000),
     maxPages: intEnv("CANVAS_MAX_PAGES", 20),
