@@ -124,7 +124,7 @@ export const courseInput = { course_id: courseId };
 
 export const id = z.number().describe("Canvas numeric ID");
 export const text = z.string().nullish();
-export const timestamp = z.string().nullish().describe("ISO 8601 timestamp");
+export const timestamp = z.string().nullish().describe("ISO 8601 timestamp with UTC offset");
 export const points = z.number().nullish();
 export const count = z.number().nullish();
 export const flag = z.boolean().nullish();

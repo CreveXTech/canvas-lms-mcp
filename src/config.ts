@@ -1,3 +1,5 @@
+import { assertTimeZone } from "./output.js";
+
 export type TransportMode = "stdio" | "http";
 
 export interface Config {
@@ -18,6 +20,8 @@ export interface Config {
   requestTimeoutMs: number;
   maxPages: number;
   maxConcurrency: number;
+  /** IANA zone Canvas timestamps are converted into. Undefined leaves them in UTC. */
+  timeZone: string | undefined;
 }
 
 function required(name: string): string {
@@ -60,6 +64,17 @@ export function loadConfig(): Config {
 
   const httpPort = intEnv("MCP_HTTP_PORT", 3000);
 
+  const timeZone = process.env["CANVAS_TIMEZONE"] || undefined;
+  if (timeZone) {
+    try {
+      assertTimeZone(timeZone);
+    } catch {
+      throw new Error(
+        `CANVAS_TIMEZONE must be an IANA time zone (e.g. America/Los_Angeles), got: ${timeZone}`,
+      );
+    }
+  }
+
   return {
     canvasBaseUrl: (
       process.env["CANVAS_BASE_URL"] ?? "https://canvas.instructure.com/api/v1"
@@ -82,5 +97,6 @@ export function loadConfig(): Config {
     requestTimeoutMs: intEnv("CANVAS_TIMEOUT_MS", 30_000),
     maxPages: intEnv("CANVAS_MAX_PAGES", 20),
     maxConcurrency: intEnv("CANVAS_MAX_CONCURRENCY", 5),
+    timeZone,
   };
 }

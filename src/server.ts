@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CanvasClient } from "./canvas.js";
 import type { Config } from "./config.js";
+import { createOutputFormatter, formattedServer } from "./output.js";
 import { assignmentTools } from "./tools/assignments.js";
 import { calendarTools } from "./tools/calendar.js";
 import { conversationTools } from "./tools/conversations.js";
@@ -52,23 +53,27 @@ export function createServer(config: Config): McpServer {
         "Read-only access to the authenticated user's Canvas LMS account. " +
         "Course, assignment, module, page and file ids are Canvas numeric ids — " +
         "call the corresponding list_* tool first to discover them. HTML from " +
-        "Canvas is returned as plain text.",
+        "Canvas is returned as plain text. Fields with no value are omitted." +
+        (config.timeZone
+          ? ` Timestamps are in ${config.timeZone}, with their UTC offset.`
+          : ""),
     },
   );
 
   const canvas = new CanvasClient(config);
+  const formatted = formattedServer(server, createOutputFormatter(config.timeZone));
   const filter = createToolFilter(config);
   const { isEnabled } = filter;
   const registered: string[] = [];
 
   for (const group of TOOL_GROUPS) {
     const target = isEnabled
-      ? gatedServer(server, (tool) => {
+      ? gatedServer(formatted, (tool) => {
           if (!isEnabled(tool, group.name)) return false;
           registered.push(tool);
           return true;
         })
-      : server;
+      : formatted;
     group.register(target, canvas);
   }
 

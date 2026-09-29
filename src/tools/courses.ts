@@ -130,7 +130,7 @@ export const courseTools: ToolGroup = (server, canvas) => {
         requirement_completed_count: number;
         next_requirement_url: string | null;
         completed_at: string | null;
-      }>(`/courses/${course_id}/progress`);
+      }>(`/courses/${course_id}/users/self/progress`);
 
       return {
         requirement_count: progress.requirement_count,
