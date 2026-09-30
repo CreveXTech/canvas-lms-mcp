@@ -6,8 +6,10 @@ import {
   type ServerResponse,
 } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { tokenFingerprint } from "./canvas.js";
 import type { Config } from "./config.js";
 import { createServer, SERVER_NAME, SERVER_VERSION } from "./server.js";
+import { logError } from "./log.js";
 
 const MCP_PATH = "/mcp";
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -47,6 +49,19 @@ function hasAllowedHost(req: IncomingMessage, allowedHosts: string[]): boolean {
   return true;
 }
 
+/** JSON-RPC method of a request body, plus the tool name for tools/call. */
+function describeRpc(body: unknown): string {
+  const messages = Array.isArray(body) ? body : [body];
+  return messages
+    .map((m) => {
+      const msg = m as { method?: unknown; params?: { name?: unknown } } | undefined;
+      const method = typeof msg?.method === "string" ? msg.method : "?";
+      const tool = typeof msg?.params?.name === "string" ? ` ${msg.params.name}` : "";
+      return method + tool;
+    })
+    .join(", ");
+}
+
 function readBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -80,6 +95,7 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 export function createHttpListener(config: Config): Server {
   return createHttpServer(async (req, res) => {
     const path = (req.url ?? "/").split("?")[0];
+    const client = `${req.socket.remoteAddress ?? "?"} ua="${req.headers["user-agent"] ?? ""}"`;
 
     // Health check stays outside auth so container probes need no secret.
     if (path === "/health") {
@@ -95,6 +111,7 @@ export function createHttpListener(config: Config): Server {
     }
 
     if (!hasAllowedHost(req, config.allowedHosts)) {
+      logError(`mcp 403 host=${req.headers.host ?? ""} ${client}`);
       jsonRpcError(res, 403, -32600, "Host or Origin header is not allowed.");
       return;
     }
@@ -102,6 +119,7 @@ export function createHttpListener(config: Config): Server {
     const header = req.headers.authorization ?? "";
     const provided = header.startsWith("Bearer ") ? header.slice(7) : "";
     if (!config.authToken || !tokensMatch(provided, config.authToken)) {
+      logError(`mcp 401 bad MCP_AUTH_TOKEN ${client}`);
       if (!res.headersSent) {
         res
           .writeHead(401, {
@@ -134,6 +152,8 @@ export function createHttpListener(config: Config): Server {
       return;
     }
 
+    console.error(`mcp ${describeRpc(body)} ${client}`);
+
     // Stateless: a fresh server and transport per request, so concurrent
     // clients cannot collide on request ids.
     const server = createServer(config);
@@ -150,7 +170,7 @@ export function createHttpListener(config: Config): Server {
       await server.connect(transport);
       await transport.handleRequest(req, res, body);
     } catch (err) {
-      console.error("Error handling MCP request:", err);
+      logError("Error handling MCP request:", err);
       jsonRpcError(res, 500, -32603, "Internal server error");
     }
   });
@@ -171,6 +191,7 @@ export async function startHttpTransport(config: Config): Promise<void> {
     `${SERVER_NAME} ${SERVER_VERSION} listening on http://${config.httpHost}:${config.httpPort}${MCP_PATH}`,
   );
   console.error(`Allowed Host headers: ${config.allowedHosts.join(", ")}`);
+  console.error(`Canvas token fingerprint: ${tokenFingerprint(config.canvasApiToken)}`);
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {

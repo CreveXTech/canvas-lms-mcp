@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { startHttpTransport } from "./http.js";
 import { createServer, SERVER_NAME, SERVER_VERSION } from "./server.js";
+import { logError } from "./log.js";
 
 /**
  * Loads a project-root `.env` when one exists, so a locally spawned server needs
@@ -17,7 +18,7 @@ function loadDotEnv(): void {
   try {
     process.loadEnvFile(envPath);
   } catch (err) {
-    console.error(
+    logError(
       `Warning: could not read ${envPath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
@@ -39,6 +40,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(`Fatal error: ${err instanceof Error ? err.message : String(err)}`);
+  logError(`Fatal error: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });
