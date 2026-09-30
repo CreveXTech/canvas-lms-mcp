@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Config } from "./config.js";
 
 export class CanvasError extends Error {
@@ -29,6 +30,11 @@ function nextLink(header: string | null): string | null {
     if (match?.[1]) return match[1];
   }
   return null;
+}
+
+/** Short, non-reversible id for a token, so logs can tell tokens apart without leaking them. */
+export function tokenFingerprint(token: string): string {
+  return createHash("sha256").update(token).digest("hex").slice(0, 12);
 }
 
 function backoffMs(attempt: number): number {
@@ -83,6 +89,10 @@ export class CanvasClient {
         await sleep(backoffMs(attempt));
         continue;
       }
+
+      console.error(
+        `canvas ${response.status} ${new URL(url).pathname} token=${tokenFingerprint(this.config.canvasApiToken)}`,
+      );
 
       if (response.ok) return response;
 
