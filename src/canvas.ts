@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Config } from "./config.js";
+import { logError } from "./log.js";
 
 export class CanvasError extends Error {
   constructor(
@@ -90,7 +91,7 @@ export class CanvasClient {
         continue;
       }
 
-      console.error(
+      (response.ok ? console.error : logError)(
         `canvas ${response.status} ${new URL(url).pathname} token=${tokenFingerprint(this.config.canvasApiToken)}`,
       );
 

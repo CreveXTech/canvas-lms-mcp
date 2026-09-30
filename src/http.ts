@@ -9,6 +9,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { tokenFingerprint } from "./canvas.js";
 import type { Config } from "./config.js";
 import { createServer, SERVER_NAME, SERVER_VERSION } from "./server.js";
+import { logError } from "./log.js";
 
 const MCP_PATH = "/mcp";
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
@@ -110,7 +111,7 @@ export function createHttpListener(config: Config): Server {
     }
 
     if (!hasAllowedHost(req, config.allowedHosts)) {
-      console.error(`mcp 403 host=${req.headers.host ?? ""} ${client}`);
+      logError(`mcp 403 host=${req.headers.host ?? ""} ${client}`);
       jsonRpcError(res, 403, -32600, "Host or Origin header is not allowed.");
       return;
     }
@@ -118,7 +119,7 @@ export function createHttpListener(config: Config): Server {
     const header = req.headers.authorization ?? "";
     const provided = header.startsWith("Bearer ") ? header.slice(7) : "";
     if (!config.authToken || !tokensMatch(provided, config.authToken)) {
-      console.error(`mcp 401 bad MCP_AUTH_TOKEN ${client}`);
+      logError(`mcp 401 bad MCP_AUTH_TOKEN ${client}`);
       if (!res.headersSent) {
         res
           .writeHead(401, {
@@ -169,7 +170,7 @@ export function createHttpListener(config: Config): Server {
       await server.connect(transport);
       await transport.handleRequest(req, res, body);
     } catch (err) {
-      console.error("Error handling MCP request:", err);
+      logError("Error handling MCP request:", err);
       jsonRpcError(res, 500, -32603, "Internal server error");
     }
   });

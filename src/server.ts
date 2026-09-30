@@ -16,6 +16,7 @@ import { quizTools } from "./tools/quizzes.js";
 import { submissionTools } from "./tools/submissions.js";
 import { userTools } from "./tools/user.js";
 import type { ToolGroup } from "./tools/common.js";
+import { logError } from "./log.js";
 
 export const SERVER_NAME = "canvas-lms-mcp";
 export const SERVER_VERSION = "2.0.0";
@@ -174,7 +175,7 @@ function reportFilterOnce(registered: string[], unused: string[]): void {
   filterReported = true;
 
   if (unused.length > 0) {
-    console.error(`Warning: tool filter patterns matched nothing: ${unused.join(", ")}`);
+    logError(`Warning: tool filter patterns matched nothing: ${unused.join(", ")}`);
   }
   console.error(`Tool filter active: ${registered.length} tools registered`);
 }
